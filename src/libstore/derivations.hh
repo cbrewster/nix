@@ -44,13 +44,24 @@ struct DerivationOutputCAFloating
  */
 struct DerivationOutputDeferred {};
 
+/* Impure output which is moved to a content-addressed location (like
+   CAFloating) but isn't registered as a realization.
+ */
+struct DerivationOutputImpure
+{
+    /* information used for expected hash computation */
+    FileIngestionMethod method;
+    HashType hashType;
+};
+
 struct DerivationOutput
 {
     std::variant<
         DerivationOutputInputAddressed,
         DerivationOutputCAFixed,
         DerivationOutputCAFloating,
-        DerivationOutputDeferred
+        DerivationOutputDeferred,
+        DerivationOutputImpure
     > output;
 
     /* Note, when you use this function you should make sure that you're passing
@@ -79,6 +90,7 @@ enum struct DerivationType : uint8_t {
     DeferredInputAddressed,
     CAFixed,
     CAFloating,
+    Impure
 };
 
 /* Do the outputs of the derivation have paths calculated from their content,
@@ -179,10 +191,13 @@ typedef std::map<std::string, Hash> CaOutputHashes;
 
 struct DeferredHash { Hash hash; };
 
+struct NoHash { };
+
 typedef std::variant<
     Hash, // regular DRV normalized hash
-    CaOutputHashes, // Fixed-output derivation hashes
-    DeferredHash // Deferred hashes for floating outputs drvs and their dependencies
+    CaOutputHashes, // fixed-output derivation hashes
+    DeferredHash, // deferred hashes for floating outputs drvs and their dependencies
+    NoHash // derivation is impure, every build may produce a different result
 > DrvHashModulo;
 
 /* Returns hashes with the details of fixed-output subderivations
@@ -213,8 +228,10 @@ DrvHashModulo hashDerivationModulo(Store & store, const Derivation & drv, bool m
 /*
    Return a map associating each output to a hash that uniquely identifies its
    derivation (modulo the self-references).
+
+   FIXME: what is the Hash in this map?
  */
-std::map<std::string, Hash> staticOutputHashes(Store& store, const Derivation& drv);
+std::map<std::string, Hash> staticOutputHashes(Store & store, const Derivation & drv);
 
 /* Memoisation of hashDerivationModulo(). */
 typedef std::map<StorePath, DrvHashModulo> DrvHashes;

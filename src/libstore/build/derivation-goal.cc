@@ -204,10 +204,34 @@ void DerivationGoal::haveDerivation()
 {
     trace("have derivation");
 
+    retrySubstitution = false;
+
+    parsedDrv = std::make_unique<ParsedDerivation>(drvPath, *drv);
+
     if (drv->type() == DerivationType::CAFloating)
         settings.requireExperimentalFeature(Xp::CaDerivations);
 
-    retrySubstitution = false;
+    if (drv->type() == DerivationType::Impure) {
+        settings.requireExperimentalFeature(Xp::ImpureDerivations);
+        settings.requireExperimentalFeature(Xp::CaDerivations);
+
+        for (auto & [outputName, output] : drv->outputs) {
+            initialOutputs.insert({
+                outputName,
+                InitialOutput {
+                    .wanted = true,
+                    .outputHash = Hash(htSHA256), // FIXME: not clear what this means
+                    .known = InitialOutputStatus {
+                        .path = StorePath::random(outputPathName(drv->name, outputName)),
+                        .status = PathStatus::Absent
+                    }
+                }
+            });
+        }
+
+        gaveUpOnSubstitution();
+        return;
+    }
 
     for (auto & i : drv->outputsAndOptPaths(worker.store))
         if (i.second.second)
@@ -215,13 +239,13 @@ void DerivationGoal::haveDerivation()
 
     auto outputHashes = staticOutputHashes(worker.evalStore, *drv);
     for (auto & [outputName, outputHash] : outputHashes)
-      initialOutputs.insert({
+        initialOutputs.insert({
             outputName,
-            InitialOutput{
+            InitialOutput {
                 .wanted = true, // Will be refined later
                 .outputHash = outputHash
             }
-          });
+        });
 
     /* Check what outputs paths are not already valid. */
     checkPathValidity();
@@ -239,9 +263,6 @@ void DerivationGoal::haveDerivation()
         done(BuildResult::AlreadyValid);
         return;
     }
-
-    parsedDrv = std::make_unique<ParsedDerivation>(drvPath, *drv);
-
 
     /* We are first going to try to create the invalid output paths
        through substitutes.  If that doesn't work, we'll build
@@ -275,6 +296,8 @@ void DerivationGoal::haveDerivation()
 void DerivationGoal::outputsSubstitutionTried()
 {
     trace("all outputs substituted (maybe)");
+
+    assert(drv->type() != DerivationType::Impure);
 
     if (nrFailed > 0 && nrFailed > nrNoSubstituters + nrIncompleteClosure && !settings.tryFallback) {
         done(BuildResult::TransientFailure,
@@ -364,6 +387,8 @@ void DerivationGoal::gaveUpOnSubstitution()
 
 void DerivationGoal::repairClosure()
 {
+    assert(drv->type() != DerivationType::Impure);
+
     /* If we're repairing, we now know that our own outputs are valid.
        Now check whether the other paths in the outputs closure are
        good.  If not, then start derivation goals for the derivations
@@ -466,7 +491,7 @@ void DerivationGoal::inputsRealised()
 
             auto pathResolved = writeDerivation(worker.store, drvResolved);
 
-            auto msg = fmt("Resolved derivation: '%s' -> '%s'",
+            auto msg = fmt("resolved derivation: '%s' -> '%s'",
                 worker.store.printStorePath(drvPath),
                 worker.store.printStorePath(pathResolved));
             act = std::make_unique<Activity>(*logger, lvlInfo, actBuildWaiting, msg,
@@ -588,29 +613,31 @@ void DerivationGoal::tryToBuild()
        omitted, but that would be less efficient.)  Note that since we
        now hold the locks on the output paths, no other process can
        build this derivation, so no further checks are necessary. */
-    checkPathValidity();
-    bool allValid = true;
-    for (auto & [_, status] : initialOutputs) {
-        if (!status.wanted) continue;
-        if (!status.known || !status.known->isValid()) {
-            allValid = false;
-            break;
+    if (drv->type() != DerivationType::Impure) {
+        checkPathValidity();
+        bool allValid = true;
+        for (auto & [_, status] : initialOutputs) {
+            if (!status.wanted) continue;
+            if (!status.known || !status.known->isValid()) {
+                allValid = false;
+                break;
+            }
         }
-    }
-    if (buildMode != bmCheck && allValid) {
-        debug("skipping build of derivation '%s', someone beat us to it", worker.store.printStorePath(drvPath));
-        outputLocks.setDeletion(true);
-        done(BuildResult::AlreadyValid);
-        return;
-    }
+        if (buildMode != bmCheck && allValid) {
+            debug("skipping build of derivation '%s', someone beat us to it", worker.store.printStorePath(drvPath));
+            outputLocks.setDeletion(true);
+            done(BuildResult::AlreadyValid);
+            return;
+        }
 
-    /* If any of the outputs already exist but are not valid, delete
-       them. */
-    for (auto & [_, status] : initialOutputs) {
-        if (!status.known || status.known->isValid()) continue;
-        auto storePath = status.known->path;
-        debug("removing invalid path '%s'", worker.store.printStorePath(status.known->path));
-        deletePath(worker.store.Store::toRealPath(storePath));
+        /* If any of the outputs already exist but are not valid, delete
+           them. */
+        for (auto & [_, status] : initialOutputs) {
+            if (!status.known || status.known->isValid()) continue;
+            auto storePath = status.known->path;
+            debug("removing invalid path '%s'", worker.store.printStorePath(status.known->path));
+            deletePath(worker.store.Store::toRealPath(storePath));
+        }
     }
 
     /* Don't do a remote build if the derivation has the attribute
@@ -937,7 +964,8 @@ void DerivationGoal::buildDone()
     done(BuildResult::Built);
 }
 
-void DerivationGoal::resolvedFinished() {
+void DerivationGoal::resolvedFinished()
+{
     assert(resolvedDrvGoal);
     auto resolvedDrv = *resolvedDrvGoal->drv;
 
@@ -1241,6 +1269,7 @@ void DerivationGoal::flushLine()
 
 std::map<std::string, std::optional<StorePath>> DerivationGoal::queryPartialDerivationOutputMap()
 {
+    assert(drv->type() != DerivationType::Impure);
     if (!useDerivation || drv->type() != DerivationType::CAFloating) {
         std::map<std::string, std::optional<StorePath>> res;
         for (auto & [name, output] : drv->outputs)
@@ -1253,6 +1282,7 @@ std::map<std::string, std::optional<StorePath>> DerivationGoal::queryPartialDeri
 
 OutputPathMap DerivationGoal::queryDerivationOutputMap()
 {
+    assert(drv->type() != DerivationType::Impure);
     if (!useDerivation || drv->type() != DerivationType::CAFloating) {
         OutputPathMap res;
         for (auto & [name, output] : drv->outputsAndOptPaths(worker.store))
@@ -1266,8 +1296,11 @@ OutputPathMap DerivationGoal::queryDerivationOutputMap()
 
 void DerivationGoal::checkPathValidity()
 {
+    if (drv->type() == DerivationType::Impure) return;
+
     bool checkHash = buildMode == bmRepair;
     auto wantedOutputsLeft = wantedOutputs;
+
     for (auto & i : queryPartialDerivationOutputMap()) {
         InitialOutput & info = initialOutputs.at(i.first);
         info.wanted = wantOutput(i.first, wantedOutputs);
@@ -1305,6 +1338,7 @@ void DerivationGoal::checkPathValidity()
             }
         }
     }
+
     // If we requested all the outputs via the empty set, we are always fine.
     // If we requested specific elements, the loop above removes all the valid
     // ones, so any that are left must be invalid.

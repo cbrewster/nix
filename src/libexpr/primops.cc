@@ -963,6 +963,7 @@ static void prim_derivationStrict(EvalState & state, const Pos & pos, Value * * 
     PathSet context;
 
     bool contentAddressed = false;
+    bool isImpure = false;
     std::optional<std::string> outputHash;
     std::string outputHashAlgo;
     auto ingestionMethod = FileIngestionMethod::Flat;
@@ -1023,6 +1024,12 @@ static void prim_derivationStrict(EvalState & state, const Pos & pos, Value * * 
                 contentAddressed = state.forceBool(*i->value, pos);
                 if (contentAddressed)
                     settings.requireExperimentalFeature(Xp::CaDerivations);
+            }
+
+            else if (i->name == state.sImpure) {
+                isImpure = state.forceBool(*i->value, pos);
+                if (isImpure)
+                    settings.requireExperimentalFeature(Xp::ImpureDerivations);
             }
 
             /* The `args' attribute is special: it supplies the
@@ -1172,16 +1179,30 @@ static void prim_derivationStrict(EvalState & state, const Pos & pos, Value * * 
         });
     }
 
-    else if (contentAddressed) {
+    else if (contentAddressed || isImpure) {
+        if (contentAddressed && isImpure)
+            throw EvalError({
+                .msg = hintfmt("derivation cannot be both content-addressed and impure"),
+                .errPos = posDrvName
+            });
+
         HashType ht = parseHashType(outputHashAlgo);
         for (auto & i : outputs) {
             drv.env[i] = hashPlaceholder(i);
-            drv.outputs.insert_or_assign(i, DerivationOutput {
-                .output = DerivationOutputCAFloating {
-                    .method = ingestionMethod,
-                    .hashType = ht,
-                },
-            });
+            drv.outputs.insert_or_assign(i,
+                isImpure
+                ? DerivationOutput {
+                    .output = DerivationOutputImpure {
+                        .method = ingestionMethod,
+                        .hashType = ht,
+                    }
+                }
+                : DerivationOutput {
+                    .output = DerivationOutputCAFloating {
+                        .method = ingestionMethod,
+                        .hashType = ht,
+                    }
+                });
         }
     }
 
@@ -1229,6 +1250,10 @@ static void prim_derivationStrict(EvalState & state, const Pos & pos, Value * * 
                             .output = DerivationOutputDeferred{},
                         });
                 }
+            },
+            [&](NoHash &) {
+                // Shouldn't happen as the toplevel derivation is not impure.
+                assert(false);
             },
         },
         hashModulo);

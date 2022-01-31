@@ -749,8 +749,7 @@ BuiltPaths getBuiltPaths(ref<Store> evalStore, ref<Store> store, const DerivedPa
                             throw Error(
                                 "the derivation '%s' doesn't have an output named '%s'",
                                 store->printStorePath(bfd.drvPath), output);
-                        if (settings.isExperimentalFeatureEnabled(
-                                Xp::CaDerivations)) {
+                        if (settings.isExperimentalFeatureEnabled(Xp::CaDerivations)) {
                             auto outputId =
                                 DrvOutput{outputHashes.at(output), output};
                             auto realisation =

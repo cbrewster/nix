@@ -2324,6 +2324,7 @@ void LocalDerivationGoal::registerOutputs()
         };
 
         ValidPathInfo newInfo = std::visit(overloaded {
+
             [&](const DerivationOutputInputAddressed & output) {
                 /* input-addressed case */
                 auto requiredFinalPath = output.path;
@@ -2343,6 +2344,7 @@ void LocalDerivationGoal::registerOutputs()
                     newInfo0.references.insert(newInfo0.path);
                 return newInfo0;
             },
+
             [&](const DerivationOutputCAFixed & dof) {
                 auto newInfo0 = newInfoFromCA(DerivationOutputCAFloating {
                     .method = dof.hash.method,
@@ -2365,10 +2367,12 @@ void LocalDerivationGoal::registerOutputs()
                 }
                 return newInfo0;
             },
-            [&](DerivationOutputCAFloating dof) {
+
+            [&](DerivationOutputCAFloating & dof) {
                 return newInfoFromCA(dof);
             },
-                [&](DerivationOutputDeferred) {
+
+            [&](DerivationOutputDeferred) {
                 // No derivation should reach that point without having been
                 // rewritten first
                 assert(false);
@@ -2377,6 +2381,14 @@ void LocalDerivationGoal::registerOutputs()
                 // let's provide it
                 return *(ValidPathInfo*)0;
             },
+
+            [&](DerivationOutputImpure & doi) {
+                return newInfoFromCA(DerivationOutputCAFloating {
+                    .method = doi.method,
+                    .hashType = doi.hashType,
+                });
+            },
+
         }, output.output);
 
         /* FIXME: set proper permissions in restorePath() so
@@ -2577,12 +2589,17 @@ void LocalDerivationGoal::registerOutputs()
        that for floating CA derivations, which otherwise couldn't be cached,
        but it's fine to do in all cases. */
 
-    if (settings.isExperimentalFeatureEnabled(Xp::CaDerivations)) {
-        for (auto& [outputName, newInfo] : infos) {
-            auto thisRealisation = Realisation{
-                .id = DrvOutput{initialOutputs.at(outputName).outputHash,
-                                outputName},
-                .outPath = newInfo.path};
+    if (settings.isExperimentalFeatureEnabled(Xp::CaDerivations)
+        && drv->type() != DerivationType::Impure)
+    {
+        for (auto & [outputName, newInfo] : infos) {
+            auto thisRealisation = Realisation {
+                .id = DrvOutput {
+                    initialOutputs.at(outputName).outputHash,
+                    outputName
+                },
+                .outPath = newInfo.path
+            };
             signRealisation(thisRealisation);
             worker.store.registerDrvOutput(thisRealisation);
         }
