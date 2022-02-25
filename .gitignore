@@ -124,3 +124,6 @@ nix-rust/target
 result
 
 .vscode/
+
+.direnv
+nixos.qcow2

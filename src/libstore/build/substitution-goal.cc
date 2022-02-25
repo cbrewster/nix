@@ -36,6 +36,8 @@ void PathSubstitutionGoal::init()
 
     worker.store.addTempRoot(storePath);
 
+    trace("real store: " + worker.store.name());
+
     /* If the path already exists we're done. */
     if (!repair && worker.store.isValidPath(storePath)) {
         amDone(ecSuccess);
@@ -53,7 +55,7 @@ void PathSubstitutionGoal::init()
 
 void PathSubstitutionGoal::tryNext()
 {
-    trace("trying next substituter");
+    /* trace("trying next substituter"); */
 
     cleanup();
 
@@ -204,9 +206,14 @@ void PathSubstitutionGoal::tryToRun()
             Activity act(*logger, actSubstitute, Logger::Fields{worker.store.printStorePath(storePath), sub->getUri()});
             PushActivity pact(act.id);
 
-            copyStorePath(*sub, worker.store,
-                subPath ? *subPath : storePath, repair, sub->isTrusted ? NoCheckSigs : CheckSigs);
-
+            // TODO(cbrewster): This only applies to cachefs
+            if (sub->isValidPath(storePath)) {
+                worker.store.registerValidPath(*info);
+            } else {
+                copyStorePath(*sub, worker.store,
+                    subPath ? *subPath : storePath, repair, sub->isTrusted ? NoCheckSigs : CheckSigs);
+            }
+ 
             promise.set_value();
         } catch (...) {
             promise.set_exception(std::current_exception());

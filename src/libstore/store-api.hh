@@ -358,6 +358,16 @@ public:
     /* Check whether a path is valid. */
     bool isValidPath(const StorePath & path);
 
+    // TODO(cbrewster): Not sure if this should go top-level like this.
+    /* Register the validity of a path, i.e., that `path' exists, that
+       the paths referenced by it exists, and in the case of an output
+       path of a derivation, that it has been produced by a successful
+       execution of the derivation (or something equivalent).  Also
+       register the hash of the file system contents of the path.  The
+       hash must be a SHA-256 hash. */
+    virtual void registerValidPath(const ValidPathInfo & info)
+    { unsupported("registerValidPath"); }
+
 protected:
 
     virtual bool isValidPathUncached(const StorePath & path);

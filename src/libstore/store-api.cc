@@ -1387,7 +1387,7 @@ ref<Store> openStore(const std::string & uri_,
         }
     }
 
-    throw Error("don't know how to open Nix store '%s'", uri_);
+    throw Error("hmms don't know how to open Nix store '%s'", uri_);
 }
 
 std::list<ref<Store>> getDefaultSubstituters()
