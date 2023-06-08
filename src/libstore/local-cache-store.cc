@@ -43,7 +43,7 @@ void LocalCacheStore::queryPathInfoUncached(
     {
         debug("LocalCacheStore.queryPathInfoUncached storePath: %s", printStorePath(path));
         auto narinfo_path = std::string{path.hashPart()} + ".narinfo";
-        auto real_narinfo_path = this->rootDir + "/nix/store/" + narinfo_path;
+        auto real_narinfo_path = this->realStoreDir.get() + narinfo_path;
         debug("LocalCacheStore.queryPathInfoUncached: %s", narinfo_path);
         try {
             auto narinfo_str = nix::readFile(real_narinfo_path);
