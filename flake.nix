@@ -116,6 +116,8 @@
             buildPackages.autoconf-archive
             buildPackages.autoreconfHook
             buildPackages.pkg-config
+            buildPackages.protobuf
+            buildPackages.grpc
 
             # Tests
             buildPackages.git

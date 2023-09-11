@@ -1,13 +1,19 @@
 #include "local-store.hh"
+#include "rpc_pathinfo.grpc.pb.h"
+#include <grpc/grpc.h>
+#include <grpcpp/channel.h>
+#include <grpcpp/client_context.h>
+#include <grpcpp/create_channel.h>
+#include <grpcpp/security/credentials.h>
 
 namespace nix {
 
 /**
- * Configuration for `LocalCacheStore`.
+ * Configuration for `TvixStore`.
  */
-struct LocalCacheStoreConfig : virtual LocalFSStoreConfig
+struct TvixStoreConfig : virtual LocalFSStoreConfig
 {
-    LocalCacheStoreConfig(const StringMap & params)
+    TvixStoreConfig(const StringMap & params)
         : StoreConfig(params)
         , LocalFSStoreConfig(params)
     { }
@@ -19,7 +25,7 @@ struct LocalCacheStoreConfig : virtual LocalFSStoreConfig
         return
           ""
           // FIXME write docs
-          //#include "local-cache-store.md"
+          //#include "tvix-store.md"
           ;
     }
 
@@ -28,23 +34,25 @@ struct LocalCacheStoreConfig : virtual LocalFSStoreConfig
 /**
  * Variation of local store that uses a using overlayfs for the store dir.
  */
-class LocalCacheStore : public virtual LocalCacheStoreConfig, public virtual LocalFSStore
+class TvixStore : public virtual TvixStoreConfig, public virtual LocalFSStore
 {
 
 public:
-    LocalCacheStore(const Params & params);
+    TvixStore(const Params & params);
 
-    LocalCacheStore(std::string scheme, std::string path, const Params & params);
+    TvixStore(std::string scheme, std::string path, const Params & params);
 
     static std::set<std::string> uriSchemes()
-    { return { "local-cache" }; }
+    { return { "tvix" }; }
 
     std::string getUri() override
     {
-        return "local-cache";
+        return "tvix";
     }
 
 private:
+    std::unique_ptr<tvix::store::v1::PathInfoService::Stub> stub_;
+
     // Overridden methods…
 
     void narFromPath(const StorePath & path, Sink & sink) override;
@@ -71,6 +79,7 @@ private:
     Roots findRoots(bool censor);
     void collectGarbage(const GCOptions & options, GCResults & results);
     void addBuildLog(const StorePath & path, std::string_view log);
+    Path addPermRoot(const StorePath & storePath, const Path & gcRoot);
 
 };
 

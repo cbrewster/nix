@@ -207,6 +207,11 @@ PKG_CHECK_MODULES([SQLITE3], [sqlite3 >= 3.6.19], [CXXFLAGS="$SQLITE3_CFLAGS $CX
 # Look for libcurl, a required dependency.
 PKG_CHECK_MODULES([LIBCURL], [libcurl], [CXXFLAGS="$LIBCURL_CFLAGS $CXXFLAGS"])
 
+PKG_CHECK_MODULES([GRPC], [grpc], [CXXFLAGS="$GRPC_CFLAGS $CXXFLAGS"])
+PKG_CHECK_MODULES([GRPCPP], [grpc++], [CXXFLAGS="$GRPCPP_CFLAGS $CXXFLAGS"])
+
+PKG_CHECK_MODULES([PROTOBUF], [protobuf], [CXXFLAGS="$PROTOBUF_CFLAGS $CXXFLAGS"])
+
 # Look for editline, a required dependency.
 # The the libeditline.pc file was added only in libeditline >= 1.15.2,
 # see https://github.com/troglobit/editline/commit/0a8f2ef4203c3a4a4726b9dd1336869cd0da8607,
